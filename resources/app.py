@@ -4,8 +4,8 @@ from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 from werkzeug.security import generate_password_hash, check_password_hash
 from http import HTTPStatus
 from flask_jwt_extended import create_access_token, jwt_required, JWTManager
-from werkzeug.exceptions import BadRequest
-
+from werkzeug.exceptions import BadRequest, abort
+from werkzeug.sansio import response
 from models import Person, db, app, User
 
 db.init_app(app)  # Initialize the DB
@@ -33,6 +33,8 @@ def create():
 @app.route('/api/v1/person/list', methods=['GET'])
 def index():
     get_person = Person.query.all()
+    if not get_person:
+        abort(response.Response("No person found"))
     person_schema = PersonSchema(many=True)
     persons = person_schema.dump(get_person)
     return make_response(jsonify({"response": persons}), HTTPStatus.OK)
@@ -41,6 +43,8 @@ def index():
 @app.route('/api/v1/person/<personId>', methods=['GET'])
 def get_person_by_id(personId):
     get_person = Person.query.get(personId)
+    if not get_person:
+        abort(404)
     person_schema = PersonSchema()
     persons = person_schema.dump(get_person)
     return make_response(jsonify({"response": persons}), HTTPStatus.OK)
@@ -52,6 +56,8 @@ def get_person_by_id(personId):
 def update_person_by_id(personId):
     data = request.get_json()
     get_person = Person.query.get(personId)
+    if not get_person:
+        abort(404)
     if data.get('personName'):
         get_person.personName = data['personName']
     if data.get('address'):
@@ -74,9 +80,14 @@ def delete_person_by_id(personId):
 @app.route('/api/v1/person/signup', methods=['POST'])
 def signup():
     body = request.get_json()
-    user = User(email=body.get('email'), password=generate_password_hash(body.get('password')))
-    user.create()
-    return make_response({'response': {'id': str(user.id), 'email': str(user.email)}}, HTTPStatus.OK)
+    emailid = body.get('email')
+    userExist = User.query.get(emailid)
+    if userExist:
+        raise BadRequest("Email already exists")
+    else:
+        user = User(email=body.get('email'), password=generate_password_hash(body.get('password')))
+        user.create()
+        return make_response({'response': {'id': str(user.id), 'email': str(user.email)}}, HTTPStatus.OK)
 
 
 @app.route('/api/v1/person/token', methods=['POST'])
